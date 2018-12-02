@@ -38,6 +38,12 @@ public class MainActivity extends Activity implements SensorEventListener {
         clearButton.setOnClickListener(this::onClickClearButton);
     }
 
+    @Override
+    protected void onPause() {
+        super.onPause();
+        stopRecord();
+    }
+
     private void onClickToggleButton(View v) {
         if (isRecording) stopRecord();
         else startRecord();
