@@ -8,6 +8,13 @@ public class Acceleration {
     private final float y;
     private final float z;
 
+    public Acceleration(long timestamp, float x, float y, float z) {
+        this.timestamp = timestamp;
+        this.x = x;
+        this.y = y;
+        this.z = z;
+    }
+
     public Acceleration(SensorEvent event) {
         timestamp = event.timestamp;
         x = event.values[0];
