@@ -1,6 +1,6 @@
 package com.rizaldi.motion.sensor.model;
 
-import java.util.Locale;
+import android.hardware.SensorEvent;
 
 public class Acceleration {
     private final long timestamp;
@@ -8,15 +8,26 @@ public class Acceleration {
     private final float y;
     private final float z;
 
-    public Acceleration(long timestamp, float x, float y, float z) {
-        this.timestamp = timestamp;
-        this.x = x;
-        this.y = y;
-        this.z = z;
+    public Acceleration(SensorEvent event) {
+        timestamp = event.timestamp;
+        x = event.values[0];
+        y = event.values[1];
+        z = event.values[2];
     }
 
-    @Override
-    public String toString() {
-        return String.format(Locale.getDefault(), "timestamp=%d, x=%.3f, y=%.3f, z=%.3f", timestamp, x, y, z);
+    public long getTimestamp() {
+        return timestamp;
+    }
+
+    public float getX() {
+        return x;
+    }
+
+    public float getY() {
+        return y;
+    }
+
+    public float getZ() {
+        return z;
     }
 }

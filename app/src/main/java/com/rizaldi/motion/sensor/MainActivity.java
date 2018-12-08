@@ -1,23 +1,28 @@
 package com.rizaldi.motion.sensor;
 
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.view.View;
-import android.widget.Button;
-import android.widget.ScrollView;
 import android.widget.TextView;
 
 import com.rizaldi.motion.sensor.model.Acceleration;
+import com.rizaldi.motion.sensor.util.MotionAnalyzer;
+import com.rizaldi.motion.sensor.util.MotionAnalyzer.RoadType;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class MainActivity extends Activity implements SensorEventListener {
-    private TextView previewText;
-    private Button toggleButton;
-    private Button clearButton;
-    private ScrollView scrollView;
+    private final List<Acceleration> accelerations = new ArrayList<>(1000000);
+    private TextView loadingText;
+    private TextView predictText;
+    private ClipboardManager clipboardManager;
     private SensorManager sensorManager;
     private Sensor sensor;
     private boolean isRecording = false;
@@ -27,15 +32,16 @@ public class MainActivity extends Activity implements SensorEventListener {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        toggleButton = findViewById(R.id.toggleButton);
-        clearButton = findViewById(R.id.clearButton);
-        previewText = findViewById(R.id.previewText);
-        scrollView = findViewById(R.id.scrollView);
+        loadingText = findViewById(R.id.loadingText);
+        predictText = findViewById(R.id.predictText);
+
+        clipboardManager = getSystemService(ClipboardManager.class);
         sensorManager = getSystemService(SensorManager.class);
         sensor = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION);
 
-        toggleButton.setOnClickListener(this::onClickToggleButton);
-        clearButton.setOnClickListener(this::onClickClearButton);
+        findViewById(R.id.toggleButton).setOnClickListener(this::onClickToggle);
+        findViewById(R.id.copyButton).setOnClickListener(this::onClickCopy);
+        findViewById(R.id.predictButton).setOnClickListener(this::onClickPredict);
     }
 
     @Override
@@ -44,40 +50,55 @@ public class MainActivity extends Activity implements SensorEventListener {
         stopRecord();
     }
 
-    private void onClickToggleButton(View v) {
+    private void onClickToggle(View v) {
         if (isRecording) stopRecord();
         else startRecord();
     }
 
+    private void onClickCopy(View v) {
+        ClipData data = ClipData.newPlainText("sensor", generateSpreadsheet());
+        clipboardManager.setPrimaryClip(data);
+    }
+
+    private void onClickPredict(View v) {
+        RoadType type = MotionAnalyzer.predictRoad(accelerations);
+        predictText.setText(type.name());
+    }
+
     private void startRecord() {
-        sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_NORMAL);
-        sensorManager.registerListener(this, sensor, SensorManager.SENSOR_STATUS_ACCURACY_HIGH);
         isRecording = true;
+        loadingText.setText("recording...");
+        accelerations.clear();
+        sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_GAME);
+        sensorManager.registerListener(this, sensor, SensorManager.SENSOR_STATUS_ACCURACY_HIGH);
     }
 
     private void stopRecord() {
-        sensorManager.unregisterListener(this, sensor);
         isRecording = false;
-    }
-
-    private void onClickClearButton(View v) {
-        previewText.setText("");
+        sensorManager.unregisterListener(this, sensor);
+        loadingText.setText("finish record.");
     }
 
     @Override
     public void onSensorChanged(SensorEvent event) {
-        Acceleration acceleration = new Acceleration(
-                event.timestamp,
-                event.values[0],
-                event.values[1],
-                event.values[2]
-        );
-        previewText.append(acceleration.toString() + '\n');
-        scrollView.fullScroll(ScrollView.FOCUS_DOWN);
+        Acceleration acceleration = new Acceleration(event);
+        accelerations.add(acceleration);
     }
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
+    }
 
+    private String generateSpreadsheet() {
+        StringBuilder text = new StringBuilder();
+        text.append("ts\tx\ty\tz");
+        for (Acceleration acceleration : accelerations) {
+            text.append('\n')
+                    .append(acceleration.getTimestamp()).append('\t')
+                    .append(acceleration.getX()).append('\t')
+                    .append(acceleration.getY()).append('\t')
+                    .append(acceleration.getZ());
+        }
+        return text.toString();
     }
 }
