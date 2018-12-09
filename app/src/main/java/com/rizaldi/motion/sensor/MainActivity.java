@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.hardware.Sensor;
@@ -12,6 +13,8 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.os.Environment;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.ContextCompat;
 import android.view.View;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -19,8 +22,8 @@ import android.widget.Toast;
 import com.nbsp.materialfilepicker.MaterialFilePicker;
 import com.nbsp.materialfilepicker.ui.FilePickerActivity;
 import com.rizaldi.motion.sensor.model.Acceleration;
+import com.rizaldi.motion.sensor.model.RoadType;
 import com.rizaldi.motion.sensor.util.MotionAnalyzer;
-import com.rizaldi.motion.sensor.util.MotionAnalyzer.RoadType;
 
 import java.io.File;
 import java.io.IOException;
@@ -61,8 +64,8 @@ public class MainActivity extends Activity implements SensorEventListener {
         loadingText = findViewById(R.id.loadingText);
         predictText = findViewById(R.id.predictText);
 
-        clipboardManager = getSystemService(ClipboardManager.class);
-        sensorManager = getSystemService(SensorManager.class);
+        clipboardManager = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         sensor = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION);
 
         findViewById(R.id.toggleButton).setOnClickListener(this::onClickToggle);
@@ -136,7 +139,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 
     private void checkPermissionsAndOpenFilePicker() {
         String permission = Manifest.permission.READ_EXTERNAL_STORAGE;
-        if (checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) {
+        if (ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED) {
             String path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).toString();
             new MaterialFilePicker()
                     .withActivity(this)
@@ -146,7 +149,7 @@ public class MainActivity extends Activity implements SensorEventListener {
                     .withPath(path)
                     .start();
         } else {
-            requestPermissions(new String[]{permission}, FILE_PICKER_PRC);
+            ActivityCompat.requestPermissions(this, new String[]{permission}, FILE_PICKER_PRC);
         }
     }
 
@@ -184,10 +187,10 @@ public class MainActivity extends Activity implements SensorEventListener {
 
     private void checkPermissionsAndExportCsv() {
         String permission = Manifest.permission.WRITE_EXTERNAL_STORAGE;
-        if (checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) {
+        if (ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED) {
             exportCsv();
         } else {
-            requestPermissions(new String[]{permission}, WRITE_CSV_RC);
+            ActivityCompat.requestPermissions(this, new String[]{permission}, WRITE_CSV_RC);
         }
     }
 

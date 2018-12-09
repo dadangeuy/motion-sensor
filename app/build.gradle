@@ -4,7 +4,7 @@ android {
     compileSdkVersion 28
     defaultConfig {
         applicationId "com.rizaldi.motion.sensor"
-        minSdkVersion 23
+        minSdkVersion 20
         targetSdkVersion 28
         versionCode 1
         versionName "1.0"
@@ -27,6 +27,8 @@ dependencies {
     implementation 'com.android.support.constraint:constraint-layout:1.1.3'
     implementation 'com.nbsp:library:1.8'
     implementation 'de.siegmar:fastcsv:1.0.3'
+    api 'com.google.guava:guava:27.0.1-android'
+    api group: 'org.apache.commons', name: 'commons-lang3', version: '3.8.1'
     testImplementation 'junit:junit:4.12'
     androidTestImplementation 'com.android.support.test:runner:1.0.2'
     androidTestImplementation 'com.android.support.test.espresso:espresso-core:3.0.2'
