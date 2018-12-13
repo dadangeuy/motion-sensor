@@ -83,6 +83,25 @@
                     android:layout_weight="1" />
             </LinearLayout>
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/rtPredictButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Real Time Predict" />
+
+                <TextView
+                    android:id="@+id/rtPredictText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
+            </LinearLayout>
+
         </LinearLayout>
     </ScrollView>
 </android.support.constraint.ConstraintLayout>

@@ -29,7 +29,14 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 
 import de.siegmar.fastcsv.reader.CsvParser;
@@ -39,40 +46,42 @@ import de.siegmar.fastcsv.writer.CsvAppender;
 import de.siegmar.fastcsv.writer.CsvWriter;
 
 public class MainActivity extends Activity implements SensorEventListener {
+    // Android Permission Request Code Identifier
     private static final int WRITE_CSV_RC = 4345;
     private static final int FILE_PICKER_RC = 35345;
     private static final int FILE_PICKER_PRC = 23123;
-    private final List<Acceleration> accelerations = new ArrayList<>(1000000);
-    private final CsvReader reader = new CsvReader();
-    private final CsvWriter writer = new CsvWriter();
-    private TextView loadingText;
-    private TextView predictText;
+    private final CsvReader reader;
+    private final CsvWriter writer;
+    private final List<Acceleration> accelerations;
+    private final AtomicReference<ScheduledExecutorService> realTimePredictExecutor;
+    private final AtomicBoolean isRecording;
+    private final AtomicInteger realTimeOffset;
+    // Android Service Component
     private ClipboardManager clipboardManager;
+    private TextView predictText;
     private SensorManager sensorManager;
     private Sensor sensor;
-    private boolean isRecording = false;
+    // Android Ui Component
+    private TextView loadingText;
+    private TextView rtPredictText;
 
     public MainActivity() {
+        reader = new CsvReader();
         reader.setContainsHeader(true);
+        writer = new CsvWriter();
+        accelerations = Collections.synchronizedList(new ArrayList<>(1000000));
+        realTimePredictExecutor = new AtomicReference<>(Executors.newSingleThreadScheduledExecutor());
+        isRecording = new AtomicBoolean(false);
+        realTimeOffset = new AtomicInteger(0);
     }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
-        loadingText = findViewById(R.id.loadingText);
-        predictText = findViewById(R.id.predictText);
-
-        clipboardManager = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-        sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
-        sensor = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION);
-
-        findViewById(R.id.toggleButton).setOnClickListener(this::onClickToggle);
-        findViewById(R.id.copyButton).setOnClickListener(this::onClickCopy);
-        findViewById(R.id.importButton).setOnClickListener(this::onClickImport);
-        findViewById(R.id.exportButton).setOnClickListener(this::onClickExport);
-        findViewById(R.id.predictButton).setOnClickListener(this::onClickPredict);
+        initServiceComponent();
+        initUiComponent();
+        initUiListener();
     }
 
     @Override
@@ -81,8 +90,28 @@ public class MainActivity extends Activity implements SensorEventListener {
         stopRecord();
     }
 
+    private void initServiceComponent() {
+        clipboardManager = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+        sensor = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION);
+    }
+
+    private void initUiComponent() {
+        loadingText = findViewById(R.id.loadingText);
+        predictText = findViewById(R.id.predictText);
+        rtPredictText = findViewById(R.id.rtPredictText);
+    }
+
+    private void initUiListener() {
+        findViewById(R.id.toggleButton).setOnClickListener(this::onClickToggle);
+        findViewById(R.id.copyButton).setOnClickListener(this::onClickCopy);
+        findViewById(R.id.importButton).setOnClickListener(this::onClickImport);
+        findViewById(R.id.exportButton).setOnClickListener(this::onClickExport);
+        findViewById(R.id.predictButton).setOnClickListener(this::onClickPredict);
+    }
+
     private void onClickToggle(View v) {
-        if (isRecording) stopRecord();
+        if (isRecording.get()) stopRecord();
         else startRecord();
     }
 
@@ -92,22 +121,40 @@ public class MainActivity extends Activity implements SensorEventListener {
     }
 
     private void onClickPredict(View v) {
-        RoadType type = MotionAnalyzer.predictRoad(accelerations);
-        predictText.setText(type.name());
+        RoadType road = MotionAnalyzer.predictRoad(accelerations);
+        predictText.setText(road.name());
     }
 
     private void startRecord() {
-        isRecording = true;
         accelerations.clear();
+        isRecording.set(true);
+        realTimeOffset.set(0);
+
         sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_GAME);
         sensorManager.registerListener(this, sensor, SensorManager.SENSOR_STATUS_ACCURACY_HIGH);
+
+        realTimePredictExecutor.get().scheduleAtFixedRate(this::realTimePredict, 2, 2, TimeUnit.SECONDS);
+
         loadingText.setText("recording...");
     }
 
     private void stopRecord() {
-        isRecording = false;
+        isRecording.set(false);
+
         sensorManager.unregisterListener(this, sensor);
+
+        realTimePredictExecutor.get().shutdownNow();
+        realTimePredictExecutor.set(Executors.newSingleThreadScheduledExecutor());
+
         loadingText.setText("finish record.");
+    }
+
+    private void realTimePredict() {
+        List<Acceleration> realTimeData = accelerations.subList(realTimeOffset.get(), accelerations.size());
+        realTimeOffset.addAndGet(realTimeData.size());
+
+        RoadType road = MotionAnalyzer.predictRoad(realTimeData);
+        rtPredictText.setText(road.name());
     }
 
     @Override
