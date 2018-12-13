@@ -12,7 +12,7 @@ public final class MotionAnalyzer {
         return predictRoad(data.toArray(new Acceleration[0]));
     }
 
-    public static RoadType predictRoad(Acceleration[] data) {
+    private static RoadType predictRoad(Acceleration[] data) {
         double[] height = getHeightPosition(data);
         long durationNano = data[data.length - 1].getTimestamp() - data[0].getTimestamp();
         int durationSecond = Long.valueOf(durationNano / 1000000000).intValue();
@@ -82,8 +82,7 @@ public final class MotionAnalyzer {
         int down = count(motions, MotionType.DOWN);
         double bouncingDuration = (up + down) * durationPerMotion;
 
-        if (bouncingDuration > 0.5) return RoadType.DAMAGED;
-        else if (bouncingDuration > 0.1 && upThenDown(motions)) return RoadType.SPEED_BUMP;
+        if (bouncingDuration > 0.1 && upThenDown(motions)) return RoadType.SPEED_BUMP;
         else if (bouncingDuration > 0.1 && downThenUp(motions)) return RoadType.POTHOLE;
         else return RoadType.NORMAL;
     }
