@@ -1,12 +1,12 @@
 package com.rizaldi.motion.sensor;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -14,11 +14,17 @@ import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.os.Environment;
 import android.support.v4.app.ActivityCompat;
-import android.support.v4.content.ContextCompat;
 import android.view.View;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.android.volley.Request;
+import com.android.volley.RequestQueue;
+import com.android.volley.VolleyError;
+import com.android.volley.toolbox.StringRequest;
+import com.android.volley.toolbox.Volley;
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationServices;
 import com.nbsp.materialfilepicker.MaterialFilePicker;
 import com.nbsp.materialfilepicker.ui.FilePickerActivity;
 import com.rizaldi.motion.sensor.model.Acceleration;
@@ -30,7 +36,9 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -45,11 +53,11 @@ import de.siegmar.fastcsv.reader.CsvRow;
 import de.siegmar.fastcsv.writer.CsvAppender;
 import de.siegmar.fastcsv.writer.CsvWriter;
 
+@SuppressLint({"DefaultLocale", "MissingPermission", "SetTextI18n"})
 public class MainActivity extends Activity implements SensorEventListener {
-    // Android Permission Request Code Identifier
-    private static final int WRITE_CSV_RC = 4345;
+    // Android Request Code Identifier
     private static final int FILE_PICKER_RC = 35345;
-    private static final int FILE_PICKER_PRC = 23123;
+    // Internal Field
     private final CsvReader reader;
     private final CsvWriter writer;
     private final List<Acceleration> accelerations;
@@ -61,6 +69,8 @@ public class MainActivity extends Activity implements SensorEventListener {
     private TextView predictText;
     private SensorManager sensorManager;
     private Sensor sensor;
+    private FusedLocationProviderClient locationProvider;
+    private RequestQueue requestQueue;
     // Android Ui Component
     private TextView loadingText;
     private TextView rtPredictText;
@@ -82,6 +92,7 @@ public class MainActivity extends Activity implements SensorEventListener {
         initServiceComponent();
         initUiComponent();
         initUiListener();
+        initPermission();
     }
 
     @Override
@@ -94,6 +105,8 @@ public class MainActivity extends Activity implements SensorEventListener {
         clipboardManager = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         sensor = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION);
+        locationProvider = LocationServices.getFusedLocationProviderClient(this);
+        requestQueue = Volley.newRequestQueue(this);
     }
 
     private void initUiComponent() {
@@ -108,6 +121,17 @@ public class MainActivity extends Activity implements SensorEventListener {
         findViewById(R.id.importButton).setOnClickListener(this::onClickImport);
         findViewById(R.id.exportButton).setOnClickListener(this::onClickExport);
         findViewById(R.id.predictButton).setOnClickListener(this::onClickPredict);
+    }
+
+    private void initPermission() {
+        String[] permissions = new String[]{
+                Manifest.permission.READ_EXTERNAL_STORAGE,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_NETWORK_STATE,
+                Manifest.permission.INTERNET
+        };
+        ActivityCompat.requestPermissions(this, permissions, 0);
     }
 
     private void onClickToggle(View v) {
@@ -129,32 +153,60 @@ public class MainActivity extends Activity implements SensorEventListener {
         accelerations.clear();
         isRecording.set(true);
         realTimeOffset.set(0);
-
         sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_GAME);
         sensorManager.registerListener(this, sensor, SensorManager.SENSOR_STATUS_ACCURACY_HIGH);
-
-        realTimePredictExecutor.get().scheduleAtFixedRate(this::realTimePredict, 2, 2, TimeUnit.SECONDS);
-
+        realTimePredictExecutor.get().scheduleAtFixedRate(this::realTimePredict, 3, 3, TimeUnit.SECONDS);
         loadingText.setText("recording...");
     }
 
     private void stopRecord() {
         isRecording.set(false);
-
         sensorManager.unregisterListener(this, sensor);
-
         realTimePredictExecutor.get().shutdownNow();
         realTimePredictExecutor.set(Executors.newSingleThreadScheduledExecutor());
-
         loadingText.setText("finish record.");
     }
 
     private void realTimePredict() {
         List<Acceleration> realTimeData = accelerations.subList(realTimeOffset.get(), accelerations.size());
         realTimeOffset.addAndGet(realTimeData.size());
-
         RoadType road = MotionAnalyzer.predictRoad(realTimeData);
         rtPredictText.setText(road.name());
+        if (road == RoadType.NORMAL) return;
+        locationProvider.getLastLocation()
+                .addOnSuccessListener((location) ->
+                        savePrediction(road, location.getLatitude(), location.getLongitude()));
+    }
+
+    private void savePrediction(RoadType road, double latitude, double longitude) {
+        Map<String, String> form = new HashMap<>();
+        form.put("jenis", road.name());
+        form.put("lintang", String.valueOf(latitude));
+        form.put("bujur", String.valueOf(longitude));
+
+        StringRequest request = new StringRequest(
+                Request.Method.POST,
+                "http://fpkomber.herokuapp.com/uploadkomber",
+                (response) -> notifySuccess(road),
+                this::notifyError) {
+            @Override
+            protected Map<String, String> getParams() {
+                return form;
+            }
+        };
+        requestQueue.add(request);
+    }
+
+    private void notifySuccess(RoadType road) {
+        Toast.makeText(this,
+                road.name() + " saved",
+                Toast.LENGTH_SHORT).show();
+    }
+
+    private void notifyError(VolleyError error) {
+        Toast.makeText(this,
+                String.format("failed to save (%d)", error.networkResponse.statusCode),
+                Toast.LENGTH_SHORT).show();
     }
 
     @Override
@@ -181,23 +233,14 @@ public class MainActivity extends Activity implements SensorEventListener {
     }
 
     private void onClickImport(View v) {
-        checkPermissionsAndOpenFilePicker();
-    }
-
-    private void checkPermissionsAndOpenFilePicker() {
-        String permission = Manifest.permission.READ_EXTERNAL_STORAGE;
-        if (ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED) {
-            String path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).toString();
-            new MaterialFilePicker()
-                    .withActivity(this)
-                    .withRequestCode(FILE_PICKER_RC)
-                    .withTitle("Import CSV File")
-                    .withFilter(Pattern.compile(".*\\.csv$"))
-                    .withPath(path)
-                    .start();
-        } else {
-            ActivityCompat.requestPermissions(this, new String[]{permission}, FILE_PICKER_PRC);
-        }
+        String path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).toString();
+        new MaterialFilePicker()
+                .withActivity(this)
+                .withRequestCode(FILE_PICKER_RC)
+                .withTitle("Import CSV File")
+                .withFilter(Pattern.compile(".*\\.csv$"))
+                .withPath(path)
+                .start();
     }
 
     @Override
@@ -222,26 +265,17 @@ public class MainActivity extends Activity implements SensorEventListener {
                 Acceleration acceleration = new Acceleration(ts, x, y, z);
                 accelerations.add(acceleration);
             }
-            Toast.makeText(this, String.format("%d data added", accelerations.size()), Toast.LENGTH_LONG).show();
+            Toast.makeText(this,
+                    String.format("%d data added", accelerations.size()),
+                    Toast.LENGTH_LONG).show();
         } catch (IOException e) {
-            Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show();
+            Toast.makeText(this,
+                    e.getMessage(),
+                    Toast.LENGTH_LONG).show();
         }
     }
 
     private void onClickExport(View v) {
-        checkPermissionsAndExportCsv();
-    }
-
-    private void checkPermissionsAndExportCsv() {
-        String permission = Manifest.permission.WRITE_EXTERNAL_STORAGE;
-        if (ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED) {
-            exportCsv();
-        } else {
-            ActivityCompat.requestPermissions(this, new String[]{permission}, WRITE_CSV_RC);
-        }
-    }
-
-    private void exportCsv() {
         File directory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
         File file = new File(directory, "motion-dataset.csv");
         int id = 0;
