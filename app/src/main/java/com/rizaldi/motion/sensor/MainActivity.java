@@ -43,7 +43,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 
@@ -63,10 +62,8 @@ public class MainActivity extends Activity implements SensorEventListener {
     private final List<Acceleration> accelerations;
     private final AtomicReference<ScheduledExecutorService> realTimePredictExecutor;
     private final AtomicBoolean isRecording;
-    private final AtomicInteger realTimeOffset;
     // Android Service Component
     private ClipboardManager clipboardManager;
-    private TextView predictText;
     private SensorManager sensorManager;
     private Sensor sensor;
     private FusedLocationProviderClient locationProvider;
@@ -82,7 +79,6 @@ public class MainActivity extends Activity implements SensorEventListener {
         accelerations = Collections.synchronizedList(new ArrayList<>(1000000));
         realTimePredictExecutor = new AtomicReference<>(Executors.newSingleThreadScheduledExecutor());
         isRecording = new AtomicBoolean(false);
-        realTimeOffset = new AtomicInteger(0);
     }
 
     @Override
@@ -111,7 +107,6 @@ public class MainActivity extends Activity implements SensorEventListener {
 
     private void initUiComponent() {
         loadingText = findViewById(R.id.loadingText);
-        predictText = findViewById(R.id.predictText);
         rtPredictText = findViewById(R.id.rtPredictText);
     }
 
@@ -120,7 +115,6 @@ public class MainActivity extends Activity implements SensorEventListener {
         findViewById(R.id.copyButton).setOnClickListener(this::onClickCopy);
         findViewById(R.id.importButton).setOnClickListener(this::onClickImport);
         findViewById(R.id.exportButton).setOnClickListener(this::onClickExport);
-        findViewById(R.id.predictButton).setOnClickListener(this::onClickPredict);
     }
 
     private void initPermission() {
@@ -144,15 +138,9 @@ public class MainActivity extends Activity implements SensorEventListener {
         clipboardManager.setPrimaryClip(data);
     }
 
-    private void onClickPredict(View v) {
-        RoadType road = MotionAnalyzer.predictRoad(accelerations);
-        predictText.setText(road.name());
-    }
-
     private void startRecord() {
         accelerations.clear();
         isRecording.set(true);
-        realTimeOffset.set(0);
         sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_GAME);
         sensorManager.registerListener(this, sensor, SensorManager.SENSOR_STATUS_ACCURACY_HIGH);
         realTimePredictExecutor.get().scheduleAtFixedRate(this::realTimePredict, 3, 3, TimeUnit.SECONDS);
@@ -168,9 +156,8 @@ public class MainActivity extends Activity implements SensorEventListener {
     }
 
     private void realTimePredict() {
-        List<Acceleration> realTimeData = accelerations.subList(realTimeOffset.get(), accelerations.size());
-        realTimeOffset.addAndGet(realTimeData.size());
-        RoadType road = MotionAnalyzer.predictRoad(realTimeData);
+        RoadType road = MotionAnalyzer.predictRoad(accelerations);
+        accelerations.clear();
         rtPredictText.setText(road.name());
         if (road == RoadType.NORMAL) return;
         locationProvider.getLastLocation()

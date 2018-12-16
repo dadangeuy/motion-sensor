@@ -70,25 +70,6 @@
                 android:orientation="horizontal">
 
                 <Button
-                    android:id="@+id/predictButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="Predict" />
-
-                <TextView
-                    android:id="@+id/predictText"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:orientation="horizontal">
-
-                <Button
                     android:id="@+id/rtPredictButton"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
